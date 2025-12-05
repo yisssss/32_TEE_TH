@@ -1180,6 +1180,7 @@ position: fixed; /* 스크롤에 따라 움직이지 않도록 고정 */
 .contact-item:first-child {
   grid-column: 1;
   grid-row: 1;
+  padding-top:24px;
 }
 
 .contact-item:nth-child(2) {
@@ -1190,6 +1191,8 @@ position: fixed; /* 스크롤에 따라 움직이지 않도록 고정 */
 .contact-item:nth-child(3) {
   grid-column: 3;
   grid-row: 1;
+    padding-top:24px;
+
 }
 
 /* 2행: 콘텐츠 위치 명시적 지정 (4,5,6단) */
@@ -1316,7 +1319,7 @@ position: fixed; /* 스크롤에 따라 움직이지 않도록 고정 */
   margin-bottom: 10px;
   background: transparent;
   padding-bottom: 10px;
-  min-width: 250px;
+  min-width: 180px;
   max-width: 400px;
   z-index: 100;
   pointer-events: auto;
@@ -1364,7 +1367,7 @@ position: fixed; /* 스크롤에 따라 움직이지 않도록 고정 */
   bottom: 0;
   left: 0;
   width: 100%;
-  z-index: 1;
+  z-index: 0;
   pointer-events: none;
   margin-top: auto;
   transform: translateX(-20px); /* padding 보정 */
@@ -1372,7 +1375,7 @@ position: fixed; /* 스크롤에 따라 움직이지 않도록 고정 */
 }
 
 .contact-footer img {
-  width: 75%;
+  width: 100%;
   height: auto;
   display: block;
   margin: 0 auto;
