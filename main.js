@@ -644,9 +644,9 @@ window.addEventListener("load", () => {
             if (teethScrollbar) {
                 teethScrollbar.classList.add('active');
             }
-            
+
             // HTML 기능 초기화 (스크롤 시스템 포함)
-            // Already called initHTMLFeatures above
+            initHTMLFeatures();
         }
         
         // 로딩 페이지 페이드아웃
