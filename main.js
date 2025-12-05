@@ -643,34 +643,35 @@ window.addEventListener("load", () => {
                 pageContent.style.display = 'block';
                 pageContent.style.opacity = '1';
             }
-            
+
             // 스크롤바 표시
             if (teethScrollbar) {
                 teethScrollbar.classList.add('active');
             }
-
-            // HTML 기능 초기화 (스크롤 시스템 포함)
-            initHTMLFeatures();
 
             // 레이아웃 강제 리플로우 (브라우저가 레이아웃을 즉시 계산하도록)
             if (pageContent) {
                 void pageContent.offsetHeight; // 리플로우 강제 실행
             }
 
-            // 레이아웃이 안정화될 때까지 약간 대기 후 ScrollTrigger 새로고침
+            // 레이아웃이 완전히 안정화된 후 HTML 기능 초기화 (ScrollTrigger 생성)
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
-                    console.log('🔄 ScrollTrigger 새로고침 시작...');
+                    console.log('🚀 레이아웃 안정화 완료, initHTMLFeatures 실행...');
 
-                    // ScrollTrigger 새로고침
-                    if (window.ScrollTrigger) {
-                        window.ScrollTrigger.refresh();
-                        console.log('✅ ScrollTrigger.refresh() 완료');
-                    }
-
-                    // 강제 리사이즈 이벤트 발생 (일부 요소들이 리사이즈에 반응하도록)
+                    // 강제 리사이즈 이벤트 먼저 발생
                     window.dispatchEvent(new Event('resize'));
-                    console.log('✅ resize 이벤트 발생');
+
+                    // HTML 기능 초기화 (이제 레이아웃이 올바르게 계산됨)
+                    initHTMLFeatures();
+
+                    // ScrollTrigger 추가 새로고침
+                    setTimeout(() => {
+                        if (window.ScrollTrigger) {
+                            console.log('🔄 ScrollTrigger 최종 새로고침...');
+                            window.ScrollTrigger.refresh();
+                        }
+                    }, 50);
                 });
             });
         }
