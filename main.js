@@ -58,6 +58,18 @@ window.addEventListener("load", () => {
     }
     
     gsap.registerPlugin(ScrollTrigger);
+    
+    // GSAP 전역 성능 최적화 설정
+    gsap.config({
+        force3D: true, // GPU 가속 강제
+        nullTargetWarn: false
+    });
+    
+    // ScrollTrigger 전역 최적화 설정
+    ScrollTrigger.config({
+        autoRefreshEvents: "visibilitychange,DOMContentLoaded,load",
+        ignoreMobileResize: true // 모바일 리사이즈 무시 (성능 향상)
+    });
 
     // shaders 폴더의 쉐이더 파일들을 읽어오기
     let vs = '';
@@ -67,7 +79,7 @@ window.addEventListener("load", () => {
     const loadingPage = document.getElementById('loading-page');
     const loadingInstructionGrid = document.getElementById('loading-instruction-grid');
     const loadingPercentageGrid = document.getElementById('loading-percentage-grid');
-    const loadingPercentageCenter = loadingPercentageGrid ? loadingPercentageGrid.querySelector('.loading-percentage-center') : null;
+    const loadingPercentageCenter = loadingPercentageGrid ? loadingPercentageGrid.querySelector('.loading-percentage-number') : null;
     const pageContent = document.getElementById('page-content');
     const teethScrollbar = document.getElementById('teeth-scrollbar');
 
@@ -228,15 +240,78 @@ window.addEventListener("load", () => {
             // 이미지 컨테이너 및 Plane 설정 함수
         const setupPlaneWithImageSize = () => {
             console.log('🖼️ setupPlaneWithImageSize 시작...');
-            const imgWidth = backgroundImg.naturalWidth || backgroundImg.width;
-            const imgHeight = backgroundImg.naturalHeight || backgroundImg.height;
             
-            if (imgWidth === 0 || imgHeight === 0) {
-                loadingImageContainer.style.width = '800px';
-                loadingImageContainer.style.height = '800px';
+            // loading.png 이미지 가져오기 (비율 계산용)
+            const biteTextureImg = loadingImageContainer.querySelector('img[data-sampler="uBiteTexture"]');
+            
+            // 배경 이미지 크기
+            const bgImgWidth = backgroundImg.naturalWidth || backgroundImg.width;
+            const bgImgHeight = backgroundImg.naturalHeight || backgroundImg.height;
+            
+            // loading.png 이미지 비율에 맞춰 컨테이너 크기 설정
+            let containerWidth = bgImgWidth;
+            let containerHeight = bgImgHeight;
+            
+            // loading.png 이미지가 로드되었는지 확인하고 비율 적용
+            if (biteTextureImg) {
+                const checkBiteImage = () => {
+                    const biteWidth = biteTextureImg.naturalWidth || biteTextureImg.width;
+                    const biteHeight = biteTextureImg.naturalHeight || biteTextureImg.height;
+                    
+                    if (biteWidth > 0 && biteHeight > 0) {
+                        // loading.png의 비율 계산
+                        const biteAspectRatio = biteWidth / biteHeight;
+                        
+                        // loading.png 비율에 맞춰 컨테이너 크기 조정
+                        // 화면 크기에 맞춰 적절한 너비 설정 (배경 이미지 너비 또는 화면 너비의 80%)
+                        const maxWidth = Math.min(bgImgWidth || 1920, window.innerWidth * 0.9);
+                        containerWidth = maxWidth;
+                        containerHeight = containerWidth / biteAspectRatio;
+                        
+                        // 컨테이너 크기 설정
+                        if (containerWidth > 0 && containerHeight > 0) {
+                            loadingImageContainer.style.width = containerWidth + 'px';
+                            loadingImageContainer.style.height = containerHeight + 'px';
+                            console.log(`✅ loading.png 비율 반영: ${containerWidth}x${containerHeight} (비율: ${biteAspectRatio.toFixed(2)}, 원본: ${biteWidth}x${biteHeight})`);
+                        }
+                    } else {
+                        // 이미지가 아직 로드되지 않았으면 기본값 사용
+                        if (containerWidth === 0 || containerHeight === 0) {
+                            loadingImageContainer.style.width = '800px';
+                            loadingImageContainer.style.height = '800px';
+                        } else {
+                            loadingImageContainer.style.width = containerWidth + 'px';
+                            loadingImageContainer.style.height = containerHeight + 'px';
+                        }
+                    }
+                };
+                
+                // 이미지가 이미 로드되었는지 확인
+                if (biteTextureImg.complete && biteTextureImg.naturalWidth > 0) {
+                    checkBiteImage();
+                } else {
+                    // 이미지 로드 대기
+                    biteTextureImg.addEventListener('load', checkBiteImage, { once: true });
+                    biteTextureImg.addEventListener('error', () => {
+                        // 로드 실패 시 배경 이미지 크기 사용
+                        if (containerWidth === 0 || containerHeight === 0) {
+                            loadingImageContainer.style.width = '800px';
+                            loadingImageContainer.style.height = '800px';
+                        } else {
+                            loadingImageContainer.style.width = containerWidth + 'px';
+                            loadingImageContainer.style.height = containerHeight + 'px';
+                        }
+                    }, { once: true });
+                }
             } else {
-                loadingImageContainer.style.width = imgWidth + 'px';
-                loadingImageContainer.style.height = imgHeight + 'px';
+                // loading.png가 없으면 배경 이미지 크기 사용
+                if (containerWidth === 0 || containerHeight === 0) {
+                    loadingImageContainer.style.width = '800px';
+                    loadingImageContainer.style.height = '800px';
+                } else {
+                    loadingImageContainer.style.width = containerWidth + 'px';
+                    loadingImageContainer.style.height = containerHeight + 'px';
+                }
             }
 
             let pressStartTime = 0;
@@ -306,6 +381,28 @@ window.addEventListener("load", () => {
             const loadingBiteRotations = new Float32Array(CONSTANTS.MAX_BITES);
             let loadingBiteCount = 0;
             
+            // 컨테이너 크기 변수 (나중에 업데이트됨)
+            let finalContainerWidth = bgImgWidth || 800;
+            let finalContainerHeight = bgImgHeight || 800;
+            
+            // loading.png 이미지가 로드되면 컨테이너 크기 업데이트
+            const updateContainerSize = () => {
+                const biteTextureImg = loadingImageContainer.querySelector('img[data-sampler="uBiteTexture"]');
+                
+                if (biteTextureImg && biteTextureImg.complete) {
+                    const biteWidth = biteTextureImg.naturalWidth || biteTextureImg.width;
+                    const biteHeight = biteTextureImg.naturalHeight || biteTextureImg.height;
+                    
+                    if (biteWidth > 0 && biteHeight > 0) {
+                        const biteAspectRatio = biteWidth / biteHeight;
+                        // 화면 크기에 맞춰 적절한 너비 설정
+                        const maxWidth = Math.min(bgImgWidth || 1920, window.innerWidth * 0.9);
+                        finalContainerWidth = maxWidth;
+                        finalContainerHeight = finalContainerWidth / biteAspectRatio;
+                    }
+                }
+            };
+            
             // Plane 파라미터 (현재 쉐이더 구조에 맞춤)
             const params = {
                 vertexShader: vs,
@@ -316,7 +413,7 @@ window.addEventListener("load", () => {
                     resolution: {
                         name: "uResolution",
                         type: "2f",
-                        value: [imgWidth || 800, imgHeight || 800],
+                        value: [finalContainerWidth, finalContainerHeight],
                     },
                 time: {
                     name: "uTime",
@@ -400,9 +497,15 @@ window.addEventListener("load", () => {
                     loadingImageContainer.style.pointerEvents = 'auto';
                 }
 
-                // Plane 크기 확인
+                // 컨테이너 크기 업데이트 (loading.png 비율 반영)
+                updateContainerSize();
+                
+                // Plane 크기 확인 및 업데이트 (loading.png 비율 반영된 크기 사용)
                 const planeBoundingRect = loadingPlane.getBoundingRect();
-                loadingPlane.uniforms.resolution.value = [planeBoundingRect.width, planeBoundingRect.height];
+                // 컨테이너의 실제 크기 사용 (loading.png 비율이 반영된 크기)
+                const finalWidth = parseFloat(loadingImageContainer.style.width) || finalContainerWidth || planeBoundingRect.width;
+                const finalHeight = parseFloat(loadingImageContainer.style.height) || finalContainerHeight || planeBoundingRect.height;
+                loadingPlane.uniforms.resolution.value = [finalWidth, finalHeight];
                 
                 onPressStartHandler = function(e) {
                 e.preventDefault();
@@ -624,9 +727,13 @@ window.addEventListener("load", () => {
                     loadingPercentageCenter.textContent = Math.round(loadingProgress * 100);
                 }
             }).onAfterResize(() => {
-                // 리사이즈 시 plane 크기 업데이트 (이미지 원본 사이즈 유지)
+                // 리사이즈 시 plane 크기 업데이트 (loading.png 비율 유지)
+                updateContainerSize();
                 const planeBoundingRect = loadingPlane.getBoundingRect();
-                loadingPlane.uniforms.resolution.value = [planeBoundingRect.width, planeBoundingRect.height];
+                // 컨테이너의 실제 크기 사용
+                const finalWidth = parseFloat(loadingImageContainer.style.width) || finalContainerWidth || planeBoundingRect.width;
+                const finalHeight = parseFloat(loadingImageContainer.style.height) || finalContainerHeight || planeBoundingRect.height;
+                loadingPlane.uniforms.resolution.value = [finalWidth, finalHeight];
             }).onError(() => {
                 // 실패 시 HTML features만 초기화
                 initHTMLFeatures();
@@ -744,6 +851,7 @@ window.addEventListener("load", () => {
         initHeaderTabs();
         initHomeReveal();
         initStoryScroll();
+        initSloganSection();
         initProductSection();
         initContactCredit();
         console.log('🚀 initHTMLFeatures 완료!');
@@ -753,9 +861,13 @@ window.addEventListener("load", () => {
     function initSmoothScroll() {
         let currentScroll = window.scrollY || window.pageYOffset;
         let targetScroll = currentScroll;
-        let ease = 0.08; // 0.05~0.15 (낮을수록 더 부드러움)
+        // macOS/iMac 최적화: 더 빠른 반응성
+        let ease = 0.12; // 0.05~0.15 (낮을수록 더 부드러움, 높을수록 반응 빠름)
         let isScrolling = false;
         let rafId = null;
+        let lastTime = performance.now();
+        const targetFPS = 60;
+        const frameTime = 1000 / targetFPS;
         
         // Contact 섹션의 끝 위치 계산 함수
         function getMaxScrollHeight() {
@@ -775,8 +887,16 @@ window.addEventListener("load", () => {
             window.scrollTo(0, currentScroll);
         }
         
-        // 부드러운 스크롤 루프
-        function smoothScrollLoop() {
+        // 부드러운 스크롤 루프 (성능 최적화)
+        function smoothScrollLoop(currentTime) {
+            // FPS 제한으로 성능 최적화
+            const deltaTime = currentTime - lastTime;
+            if (deltaTime < frameTime) {
+                rafId = requestAnimationFrame(smoothScrollLoop);
+                return;
+            }
+            lastTime = currentTime;
+            
             // 현재 스크롤을 목표 스크롤에 가깝게 이동
             const diff = targetScroll - currentScroll;
             currentScroll += diff * ease;
@@ -796,38 +916,65 @@ window.addEventListener("load", () => {
             rafId = requestAnimationFrame(smoothScrollLoop);
         }
         
-        // 스크롤 이벤트 리스너
+        // 스크롤 이벤트 리스너 (throttle 적용)
+        let scrollTimeout = null;
         function onScroll(e) {
             // 기본 스크롤 동작 방지
             e.preventDefault();
             
-            // 휠 델타 계산
-            const delta = e.deltaY || e.detail || -e.wheelDelta;
+            // 휠 델타 계산 (macOS 스크롤 감도 조정)
+            let delta = e.deltaY || e.detail || -e.wheelDelta;
+            // macOS 트랙패드 최적화: 델타 정규화
+            if (Math.abs(delta) > 100) {
+                delta = delta * 0.5; // 큰 델타는 감소
+            }
             targetScroll += delta;
             
             // 스크롤 범위 제한 (contact 섹션 끝까지만)
             const maxScroll = getMaxScrollHeight();
             targetScroll = Math.max(0, Math.min(targetScroll, maxScroll));
             
+            // Throttle: 마지막 스크롤 후 짧은 지연
+            if (scrollTimeout) {
+                clearTimeout(scrollTimeout);
+            }
+            
             if (!isScrolling) {
                 isScrolling = true;
-                smoothScrollLoop();
+                lastTime = performance.now();
+                smoothScrollLoop(lastTime);
             }
+            
+            // 스크롤이 멈춘 후 정리
+            scrollTimeout = setTimeout(() => {
+                if (Math.abs(targetScroll - currentScroll) < 0.1) {
+                    isScrolling = false;
+                }
+            }, 150);
         }
         
-        // 휠 이벤트 등록
+        // 휠 이벤트 등록 (passive: false는 preventDefault를 위해 필요)
         window.addEventListener('wheel', onScroll, { passive: false });
         
         // 터치 스크롤도 처리 (모바일)
         let touchStartY = 0;
         let touchCurrentY = 0;
+        let touchLastTime = 0;
         
         window.addEventListener('touchstart', (e) => {
             touchStartY = e.touches[0].clientY;
+            touchLastTime = performance.now();
         }, { passive: true });
         
         window.addEventListener('touchmove', (e) => {
             e.preventDefault();
+            const currentTime = performance.now();
+            // Throttle: 16ms마다 업데이트 (60fps)
+            if (currentTime - touchLastTime < 16) {
+                return;
+            }
+            touchLastTime = currentTime;
+            
             touchCurrentY = e.touches[0].clientY;
             const delta = touchStartY - touchCurrentY;
             targetScroll += delta * 2; // 터치 스크롤은 더 빠르게
@@ -839,7 +986,8 @@ window.addEventListener("load", () => {
             
             if (!isScrolling) {
                 isScrolling = true;
-                smoothScrollLoop();
+                lastTime = performance.now();
+                smoothScrollLoop(lastTime);
             }
         }, { passive: false });
         
@@ -854,7 +1002,8 @@ window.addEventListener("load", () => {
                 
                 if (!isScrolling) {
                     isScrolling = true;
-                    smoothScrollLoop();
+                    lastTime = performance.now();
+                    smoothScrollLoop(lastTime);
                 }
             } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
                 e.preventDefault();
@@ -863,7 +1012,8 @@ window.addEventListener("load", () => {
                 
                 if (!isScrolling) {
                     isScrolling = true;
-                    smoothScrollLoop();
+                    lastTime = performance.now();
+                    smoothScrollLoop(lastTime);
                 }
             }
         });
@@ -888,7 +1038,16 @@ window.addEventListener("load", () => {
             return;
         }
         
+        // 스크롤바 업데이트 throttle (성능 최적화)
+        let scrollbarUpdateTime = 0;
         function updateTeethScrollbar() {
+            const now = performance.now();
+            // 16ms마다 업데이트 (60fps)
+            if (now - scrollbarUpdateTime < 16) {
+                return;
+            }
+            scrollbarUpdateTime = now;
+            
             const scrollPosition = window.scrollY;
             const windowHeight = window.innerHeight;
             const screenCenter = scrollPosition + windowHeight / 2; // 화면 중앙 기준
@@ -1071,13 +1230,15 @@ window.addEventListener("load", () => {
 gsap.to(homeContainer, {
         yPercent: -100,
         ease: 'none',
+        force3D: true, // GPU 가속
         scrollTrigger: {
             trigger: homeSection,
             start: 'top top',
             end: 'bottom top',
-            scrub: true,
+            scrub: 0.5, // 0.5초 지연으로 부드러움 증가 (렉 감소)
             // markers: true, // 디버깅용
-            id: '1-home-content'
+            id: '1-home-content',
+            refreshPriority: -1 // 낮은 우선순위로 성능 향상
         }
     });
 
@@ -1085,12 +1246,14 @@ gsap.to(homeContainer, {
 gsap.to(homeBackground, {
         y: '-51vh',
         ease: 'none',
+        force3D: true, // GPU 가속
         scrollTrigger: {
             trigger: homeSection,
             start: 'bottom bottom',      // Home이 끝나는 지점(100vh)부터
             end: '+=550vh',            // 50vh 동안만 이동 (150vh 지점까지)
-            scrub: true,
-            id: '2-bg-move-partial'
+            scrub: 0.5, // 부드러운 스크롤
+            id: '2-bg-move-partial',
+            refreshPriority: -1
         }
     });
 
@@ -1117,8 +1280,8 @@ gsap.to(homeBackground, {
                 titleRight: 'WORLD',
                 number: '1',
                 subTitle: '매끈한 세상',
-                textEn: 'How does food, intentionally stripped of unpleasant experiences—such as being tough, bitter, or sour—in order to be produced more efficiently and cheaply, or to appeal to a wider audience, kill our senses?',
-                textKo: '보다 효율적이고 저렴하게 생산되기 위해, 혹은 보다 많은 이에게 매력적이기 위해 유쾌하지 않은 경험— 질기거나, 쓰고 신맛이 나는—이 의도적으로 제거된 음식은 어떻게 우리의 감각을 살해하는가?'
+                textEn: 'How does food, intentionally stripped of unpleasant experiences—such as being tough, bitter, or sour—\nin order to be produced more efficiently and cheaply, \nor to appeal to a wider audience, kill our senses?',
+                textKo: '보다 효율적이고 저렴하게 생산되기 위해, \n혹은 보다 많은 이에게 매력적이기 위해 유쾌하지 않은 경험\n—질기거나, 쓰고 신맛이 나는—이 의도적으로\n제거된 음식은 어떻게 우리의 감각을 살해하는가?'
             },
             {
                 chapter: 2,
@@ -1127,8 +1290,8 @@ gsap.to(homeBackground, {
                 titleRight: 'FANTASY',
                 number: '2',
                 subTitle: '순결한 환상',
-                textEn: 'We eat what we kill. Everyone does, without exception. Smooth food instills a pure fantasy.',
-                textKo: '우리는 우리가 죽인 것을 먹는다. 예외 없이 모두가 그렇다. 매끈한 음식은 순결한 환상을 심어준다.'
+                textEn: 'We eat what we kill.\nEveryone does, without exception.\nSmooth food instills a pure fantasy.',
+                textKo: '우리는 우리가 죽인 것을 먹는다.\n예외 없이 모두가 그렇다.\n매끈한 음식은 순결한 환상을 심어준다.'
             },
             {
                 chapter: 3,
@@ -1137,8 +1300,8 @@ gsap.to(homeBackground, {
                 titleRight: 'BODY',
                 number: '3',
                 subTitle: '퇴화하는 몸',
-                textEn: 'We can only find primordial sensations through what we actually possess. There are experiences only possible through non-smooth food.',
-                textKo: '우린 우리가 실제로 가진 것을 통해서만원초의 감각을 찾을 수 있다. 매끄럽지 않은 음식을 통해서만 가능한 경험이 있다.'
+                textEn: 'We can only find primordial sensations\nthrough what we actually possess.\nThere are experiences only possible\nthrough non-smooth food.',
+                textKo: '우린 우리가 실제로 가진 것을\n통해서만 원초의 감각을 찾을 수 있다.\n매끄럽지 않은 음식을 통해서만\n가능한 경험이 있다.'
             }
         ];
 
@@ -1161,7 +1324,17 @@ gsap.to(homeBackground, {
             return;
         }
 
-        // 챕터 콘텐츠 업데이트 함수 (display만 제어)
+        // 줄바꿈 처리 함수 (텍스트의 줄바꿈을 HTML <br>로 변환)
+        function formatTextWithLineBreaks(text) {
+            if (!text) return '';
+            // \n을 <br>로 변환하고, 잘못된 </br> 태그도 <br>로 변환
+            return text
+                .replace(/\\n/g, '\n')  // \\n을 실제 줄바꿈으로
+                .replace(/<\/?br\s*\/?>/gi, '<br>')  // </br>, <br/>, <br> 등을 <br>로 통일
+                .replace(/\n/g, '<br>');  // 줄바꿈을 <br>로 변환
+        }
+
+        // 챕터 콘텐츠 업데이트 함수 (텍스트도 동적으로 업데이트)
         function updateChapterContent(index) {
             const chapter = chapters[index];
 
@@ -1181,6 +1354,23 @@ gsap.to(homeBackground, {
                     backgroundImg.src = `assets/images/story${index + 1}.png`;
                 }
             }
+
+            // 텍스트 콘텐츠 동적 업데이트
+            contentContainers.forEach((el, idx) => {
+                if (el && idx === index) {
+                    // 영문 텍스트 (첫 번째 <p>)
+                    const enParagraph = el.querySelector('p:not(.korean-body-text)');
+                    if (enParagraph && chapter.textEn) {
+                        enParagraph.innerHTML = formatTextWithLineBreaks(chapter.textEn);
+                    }
+                    
+                    // 한글 텍스트 (korean-body-text 클래스가 있는 <p>)
+                    const koParagraph = el.querySelector('p.korean-body-text');
+                    if (koParagraph && chapter.textKo) {
+                        koParagraph.innerHTML = formatTextWithLineBreaks(chapter.textKo);
+                    }
+                }
+            });
 
             // 모든 콘텐츠 표시/숨김 (즉시 반영)
             // display 대신 visibility 사용하여 Grid 레이아웃 유지
@@ -1218,6 +1408,8 @@ gsap.to(homeBackground, {
             pin: true,
             pinSpacing: true,
             id: '3-story-pin',
+            anticipatePin: 1, // 스크롤 예측으로 부드러움 향상
+            refreshPriority: 1, // 높은 우선순위 (핵심 애니메이션)
             onEnter: (self) => {
                 // 첫 진입 시 lastChapter 초기화 (이미 표시된 챕터 0)
                 self.lastChapter = 0;
@@ -1231,7 +1423,7 @@ gsap.to(homeBackground, {
                 const currentChapter = Math.min(2, Math.floor(currentChapterFloat));
                 const chapterProgress = currentChapterFloat - currentChapter;
 
-                // Threshold 효과 적용
+                // Threshold 효과 적용 (성능 최적화: blur 값 제한)
                 // 0~0.5: 현재 챕터 사라짐 (blur 0→최대)
                 // 0.5: 텍스트 변경 (blur 최대)
                 // 0.5~1.0: 다음 챕터 나타남 (blur 최대→0)
@@ -1243,9 +1435,15 @@ gsap.to(homeBackground, {
                     // 나타나는 단계: blur 25 → 0
                     blurAmount = (1 - chapterProgress) * 50; // 25~0
                 }
+                
+                // macOS 최적화: blur 값 반올림으로 리플로우 감소
+                blurAmount = Math.round(blurAmount * 10) / 10;
 
-                // Blur 효과 적용
-                applyThresholdEffect(blurAmount);
+                // Blur 효과 적용 (throttle로 성능 향상)
+                if (!self.blurUpdateTime || performance.now() - self.blurUpdateTime > 16) {
+                    applyThresholdEffect(blurAmount);
+                    self.blurUpdateTime = performance.now();
+                }
 
                 // 챕터 전환 로직
                 // chapterProgress < 0.5: 현재 챕터 표시 (blur 증가 중)
@@ -1275,18 +1473,66 @@ gsap.fromTo(homeBackground,
     {
         y: '-100vh', // 목표 위치
         ease: 'none',
+        force3D: true, // GPU 가속
         immediateRender: false, // [중요] 미리 렌더링되어 위치가 튀는 것을 방지
         scrollTrigger: {
             trigger: storySection,
             start: 'top+=1vh top', // 3단계 Pin이 끝나는 정확한 지점
             end: '+=500vh', // 자연스럽게 사라지는 거리
-            scrub: true,
-            id: '4-bg-final-move'
+            scrub: 0.5, // 부드러운 스크롤
+            id: '4-bg-final-move',
+            refreshPriority: -1
         }
     }
 );
 
         console.log('✅ Story Scroll 초기화 완료');
+    }
+
+    // Slogan 섹션 스크롤 애니메이션
+    function initSloganSection() {
+        const sloganSection = document.getElementById('slogan');
+        if (!sloganSection) {
+            console.warn('⚠️ Slogan section not found');
+            return;
+        }
+
+        const sloganLinesEn = sloganSection.querySelectorAll('.slogan-text-en .slogan-line');
+        const sloganLinesKo = sloganSection.querySelectorAll('.slogan-text-ko .slogan-line');
+        const allLines = [...sloganLinesEn, ...sloganLinesKo];
+
+        if (allLines.length === 0) {
+            console.warn('⚠️ Slogan lines not found');
+            return;
+        }
+
+        // 각 줄을 초기 위치로 설정 (아래 기준선에서 시작)
+        // 기준선은 각 줄의 원래 위치에서 100px 아래
+        allLines.forEach((line) => {
+            const originalY = line.offsetTop;
+            gsap.set(line, {
+                y: 100, // 기준선에서 100px 아래에서 시작
+                opacity: 1 // 페이드 효과 제거
+            });
+        });
+
+        // 각 줄이 순차적으로 기준선에서 올라오는 애니메이션
+        allLines.forEach((line, index) => {
+            gsap.to(line, {
+                y: 0, // 원래 위치로
+                ease: 'power2.out',
+                duration: 0.8,
+                scrollTrigger: {
+                    trigger: sloganSection,
+                    start: `top ${80 - index * 5}%`, // 각 줄마다 시작점을 조금씩 앞당김
+                    end: `top ${30 - index * 5}%`,
+                    scrub: 0.5,
+                    id: `slogan-line-${index}`
+                }
+            });
+        });
+
+        console.log('✅ Slogan Section 초기화 완료');
     }
 
     // Product 섹션 데이터 및 아코디언 초기화
@@ -1448,16 +1694,18 @@ gsap.fromTo(homeBackground,
 
                         <!-- 3단: 영양 정보 -->
                         <div class="product-nutrition">
-                            <h3>영양 정보</h3>
-                            <p style="font-size: 0.8rem; margin-bottom: 0.5rem;">100g당 함량 표기</p>
+                            <div class="nutrition-header">
+                                <h3>영양 정보</h3>
+                                <p style="font-size: 0.8rem; margin-bottom: 0.5rem;">100g당 함량 표기</p>
+                            </div>
                             ${product.nutrition.map(item => `
                                 <div class="nutrition-item">
                                     <span>${item.name}</span>
                                     <span>${item.value} (${item.percent})</span>
                                 </div>
                             `).join('')}
-                            <p class="korean-body-text" style="margin-top: 1rem; font-size: 0.75rem;">
-                                1일 영양성분 기준치에 대한 비율(%)은 2,000kcal 기준이므로
+                            <p class="korean-body-text" style="margin-top: 1rem; font-size: 0.8rem;">
+                                1일 영양성분 기준치에 대한 비율(%)은 2,000kcal 기준이므로</br>
                                 개인 필요 열량에 따라 다를 수 있습니다.
                             </p>
                         </div>
